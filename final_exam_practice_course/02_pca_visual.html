@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept 2 — PCA: Reducing 5 Dimensions to 1</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; line-height: 1.7; }
+  .hero { background: linear-gradient(135deg, #1a1f35 0%, #0d1b2a 100%); padding: 48px 32px; border-bottom: 2px solid #2a3a5c; }
+  .hero h1 { font-size: 2rem; color: #a8d8a8; margin-bottom: 8px; }
+  .hero p { color: #8a9bb0; font-size: 1.05rem; }
+  .container { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+  h2 { color: #a8d8a8; font-size: 1.4rem; margin: 40px 0 16px; padding-bottom: 6px; border-bottom: 1px solid #2a3a5c; }
+  h3 { color: #7eb8f7; font-size: 1.1rem; margin: 24px 0 10px; }
+  p { margin-bottom: 14px; color: #cdd5e0; }
+  .card { background: #1a1f2e; border: 1px solid #2a3a5c; border-radius: 12px; padding: 24px; margin: 20px 0; }
+  .card.green { border-left: 4px solid #4caf50; }
+  .card.blue  { border-left: 4px solid #2196f3; }
+  .card.orange{ border-left: 4px solid #ff9800; }
+  .card.red   { border-left: 4px solid #f44336; }
+  .formula { background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 16px 24px; margin: 16px 0; font-family: 'Courier New', monospace; font-size: 1.05rem; color: #ffd700; text-align: center; }
+  canvas { display: block; border-radius: 8px; }
+  .controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 16px 0; justify-content: center; }
+  .slider-group { display: flex; align-items: center; gap: 10px; }
+  label { color: #aaa; font-size: 0.9rem; }
+  input[type=range] { width: 150px; accent-color: #a8d8a8; }
+  .val { color: #ffd700; font-weight: bold; min-width: 36px; }
+  .step { background: #1e2840; border-radius: 8px; padding: 14px 18px; margin: 10px 0; border-left: 3px solid #a8d8a8; }
+  .step-num { display: inline-block; background: #a8d8a8; color: #0f1117; width: 26px; height: 26px; border-radius: 50%; text-align: center; line-height: 26px; font-weight: bold; margin-right: 10px; font-size: 0.85rem; }
+  .exam-box { background: #1a2010; border: 2px solid #4caf50; border-radius: 10px; padding: 20px; margin: 24px 0; }
+  .exam-box h4 { color: #4caf50; margin-bottom: 12px; }
+  pre { font-family: 'Courier New', monospace; color: #90caf9; font-size: 0.88rem; line-height: 1.6; background: #111827; padding: 16px; border-radius: 8px; overflow-x: auto; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:600px) { .two-col { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { background: #1a2540; color: #a8d8a8; padding: 10px 14px; text-align: left; }
+  td { padding: 9px 14px; border-bottom: 1px solid #1e2a40; color: #cdd5e0; }
+  code { background: #1e2840; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #ffd700; font-size: 0.9em; }
+  .highlight { background: #1e3a1e; border: 1px solid #4caf50; border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>🔭 PCA — Reducing 5D to 1D</h1>
+  <p>Principal Component Analysis: find the direction that captures maximum variance</p>
+</div>
+
+<div class="container">
+
+  <h2>The Problem: 5 Correlated Features</h2>
+  <p>Look at the exam data. The 5 columns are highly correlated — they all move together. This makes sense when you look at the ratios:</p>
+
+  <div class="card blue">
+    <h3>The exam data: x0 through x4 are nearly linearly dependent</h3>
+    <p>For a sample row: x0=21.99, x1=67.44, x2=47.13, x3=180.04, x4=112.61</p>
+    <p>Ratios: x1/x0 ≈ 3.07, x2/x0 ≈ 2.14, x3/x0 ≈ 8.19, x4/x0 ≈ 5.12</p>
+    <p>These ratios are roughly constant across all rows. This means the 5 features essentially lie on a <strong>1D line</strong> in 5D space. PCA will find that line.</p>
+  </div>
+
+  <h2>What is PCA? (The Intuition)</h2>
+  <p>Imagine 100 data points in 3D space — but they all lie roughly on a flat pancake (2D plane). You can describe each point much more compactly using just its 2D position on that pancake.</p>
+  <p>PCA finds the axes of that pancake — the directions where the data varies the most. These are called <strong>Principal Components</strong>.</p>
+
+  <div id="animWrap" style="text-align:center; margin:20px 0;">
+    <canvas id="pcaCanvas" width="820" height="340"></canvas>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Rotation</label>
+        <input type="range" id="rotation" min="0" max="360" step="1" value="0">
+        <span class="val" id="rot_val">0°</span>
+      </div>
+      <div class="slider-group">
+        <label>Noise</label>
+        <input type="range" id="noise" min="0" max="2" step="0.1" value="0.3">
+        <span class="val" id="noise_val">0.3</span>
+      </div>
+      <button onclick="regenerateData()" style="background:#4caf50;color:#0f1117;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:bold;">New Data</button>
+    </div>
+    <p style="color:#888;font-size:0.85rem;">Left: 2D data with the first principal component shown (red arrow) | Right: projected onto PC1 (1D)</p>
+  </div>
+
+  <h2>The Mathematics of PCA</h2>
+
+  <div class="step">
+    <span class="step-num">1</span><strong>Normalise each feature</strong> to zero mean and unit variance.<br>
+    <code>X_norm = (X - mean) / std</code><br>
+    <em>Why?</em> Without this, features with large values dominate. In the exam data, x3 is 8× larger than x0 — without normalisation, x3 would appear most important just because of its scale.
+  </div>
+
+  <div class="step">
+    <span class="step-num">2</span><strong>Compute the covariance matrix</strong>: Σ = (1/m) · Xᵀ · X<br>
+    <em>Why?</em> This (n×n) matrix captures how each pair of features varies together. Off-diagonal = correlation.
+  </div>
+
+  <div class="step">
+    <span class="step-num">3</span><strong>Eigendecomposition</strong>: eigenvalues λ, eigenvectors U = np.linalg.eig(Σ)<br>
+    <em>Why?</em> The eigenvectors are the principal directions. The eigenvalue = variance in that direction.
+  </div>
+
+  <div class="step">
+    <span class="step-num">4</span><strong>Sort by eigenvalue (largest first)</strong>. The first eigenvector is PC1 — the direction of maximum variance.
+  </div>
+
+  <div class="step">
+    <span class="step-num">5</span><strong>Project</strong>: x₁ = X_norm @ U[:, :1]<br>
+    This gives a single number for each data point — its coordinate along PC1.
+  </div>
+
+  <h2>Explained Variance: How Much Information is Preserved?</h2>
+
+  <div class="card green">
+    <p>The <strong>explained variance ratio</strong> tells you what fraction of the total variance is captured by k components:</p>
+    <div class="formula">explained = sum(eigenvalues[:k]) / sum(all eigenvalues)</div>
+    <p>For the exam data, because the features are nearly perfectly correlated, PC1 alone explains ~99%+ of the variance. Reducing to 1D loses almost nothing.</p>
+  </div>
+
+  <div id="screeWrap" style="text-align:center; margin: 20px 0;">
+    <canvas id="screeCanvas" width="820" height="240"></canvas>
+    <p style="color:#888; font-size:0.85rem; margin-top:8px;">Scree plot of simulated exam-like data: eigenvalue per component. If PC1 explains 99%+ variance, the rest are noise.</p>
+  </div>
+
+  <h2>The Exam Code (Problem 1b)</h2>
+
+  <div class="exam-box">
+    <h4>✅ Full PCA from scratch — no sklearn</h4>
+    <pre>
+# Step 1: Normalise
+mu    = X.mean(axis=0)          # shape (5,) — mean of each feature
+sigma = X.std(axis=0)           # shape (5,) — std of each feature
+X_norm = (X - mu) / sigma       # shape (m, 5) — each feature: mean=0, std=1
+
+# Step 2: Covariance matrix
+m = X_norm.shape[0]
+Sigma = (1/m) * X_norm.T @ X_norm   # shape (5, 5)
+
+# Step 3: Eigendecomposition
+eigenvalues, eigenvectors = np.linalg.eig(Sigma)
+
+# Step 4: Sort descending by eigenvalue
+order = np.argsort(eigenvalues)[::-1]
+eigenvalues  = eigenvalues[order].real
+eigenvectors = eigenvectors[:, order].real
+
+# Step 5: Project onto PC1
+U1 = eigenvectors[:, :1]        # shape (5, 1) — first principal component
+x1 = X_norm @ U1                # shape (m, 1) — 1D representation
+x1 = x1.flatten()               # shape (m,)
+
+explained = eigenvalues[0] / eigenvalues.sum()
+print(f"PC1 explains {explained:.1%} of variance")  # Algorithm: PCA
+    </pre>
+    <p style="color:#aaa; margin-top:8px; font-size:0.9rem;">⚠️ The exam says "Specify the name of the algorithm used" — the answer is <strong>PCA (Principal Component Analysis)</strong></p>
+  </div>
+
+  <h2>Applying to Test Data</h2>
+  <div class="card orange">
+    <h3>⚠️ Critical: Use training statistics on test data</h3>
+    <p>When you normalise test data and project it, you <strong>must</strong> use the mean (mu) and std (sigma) from the <em>training</em> set, and the eigenvectors from the <em>training</em> covariance matrix.</p>
+    <pre style="margin-top:10px;">
+# Normalise test data using TRAINING mu and sigma
+X_test_norm = (X_test - mu) / sigma    # same mu, sigma from training!
+
+# Project using TRAINING eigenvectors
+x1_test = (X_test_norm @ U1).flatten()
+    </pre>
+    <p>If you computed new mu/sigma from test data, the 1D coordinates would be on a different scale — your predictions would be wrong.</p>
+  </div>
+
+  <h2>What PCA Actually Does to the Exam Data</h2>
+  <p>Since x0 through x4 are nearly linearly dependent (x1 ≈ 3·x0, x3 ≈ 8·x0, etc.), PCA essentially finds the <em>overall magnitude</em> of the data point. All five features go up or down together, and PC1 captures this common factor.</p>
+
+  <table>
+    <tr><th>Concept</th><th>What it means in the exam</th></tr>
+    <tr><td>PC1 explained variance ≈ 99%</td><td>5 features carry almost the same info as 1</td></tr>
+    <tr><td>Eigenvector of PC1</td><td>The "loading" — how much each feature contributes to PC1</td></tr>
+    <tr><td>x1 = X_norm @ U1</td><td>Each data point's score along the main axis</td></tr>
+    <tr><td>Use training μ, σ on test</td><td>Ensures train and test are on the same scale</td></tr>
+  </table>
+
+  <p style="margin-top:32px; color:#666; text-align:center; font-size:0.85rem;">
+    ← <a href="01_probability_distributions.html" style="color:#a8d8a8;">01 — Probability Distributions</a>
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <a href="03_polynomial_regression.html" style="color:#a8d8a8;">03 — Polynomial Regression →</a>
+  </p>
+</div>
+
+<script>
+// ─── PCA animation ────────────────────────────────────────────────────────────
+const pcaC = document.getElementById('pcaCanvas');
+const pcaCtx = pcaC.getContext('2d');
+
+let pts = [];
+
+function regenerateData() {
+  const noise = parseFloat(document.getElementById('noise').value);
+  pts = [];
+  for (let i = 0; i < 80; i++) {
+    const t = (Math.random() - 0.5) * 6;
+    pts.push([t + noise*(Math.random()-0.5), 0.6*t + noise*(Math.random()-0.5)]);
+  }
+  drawPCA();
+}
+
+function drawPCA() {
+  const angle = parseFloat(document.getElementById('rotation').value) * Math.PI / 180;
+  document.getElementById('rot_val').textContent = document.getElementById('rotation').value + '°';
+  document.getElementById('noise_val').textContent = parseFloat(document.getElementById('noise').value).toFixed(1);
+
+  const W = pcaC.width, H = pcaC.height;
+  pcaCtx.clearRect(0,0,W,H);
+  pcaCtx.fillStyle = '#111827'; pcaCtx.fillRect(0,0,W,H);
+
+  // Rotate points
+  const rpts = pts.map(([x,y]) => [
+    x*Math.cos(angle) - y*Math.sin(angle),
+    x*Math.sin(angle) + y*Math.cos(angle)
+  ]);
+
+  // Compute PCA (2D)
+  const mx = rpts.reduce((s,p)=>s+p[0],0)/rpts.length;
+  const my = rpts.reduce((s,p)=>s+p[1],0)/rpts.length;
+  const cx = rpts.map(p=>[p[0]-mx, p[1]-my]);
+  const cov00 = cx.reduce((s,p)=>s+p[0]*p[0],0)/cx.length;
+  const cov01 = cx.reduce((s,p)=>s+p[0]*p[1],0)/cx.length;
+  const cov11 = cx.reduce((s,p)=>s+p[1]*p[1],0)/cx.length;
+  const tr = cov00+cov11, det = cov00*cov11-cov01*cov01;
+  const l1 = tr/2 + Math.sqrt(tr*tr/4-det);
+  const l2 = tr/2 - Math.sqrt(tr*tr/4-det);
+  const ev1 = cov01===0 ? [1,0] : [l1-cov11, cov01];
+  const ev1n = Math.hypot(ev1[0],ev1[1]);
+  const u1 = [ev1[0]/ev1n, ev1[1]/ev1n];
+
+  const scale = 40;
+  const ox = 200, oy = H/2;
+
+  // Left panel: 2D scatter
+  pcaCtx.fillStyle='#555'; pcaCtx.font='12px sans-serif';
+  pcaCtx.fillText('2D Data', ox-30, 25);
+  for (const [x,y] of rpts) {
+    pcaCtx.fillStyle='rgba(126,184,247,0.7)';
+    pcaCtx.beginPath(); pcaCtx.arc(ox+x*scale, oy-y*scale, 4, 0, 2*Math.PI); pcaCtx.fill();
+  }
+  // PC1 arrow
+  const arLen = 3;
+  pcaCtx.strokeStyle='#f44336'; pcaCtx.lineWidth=3;
+  pcaCtx.beginPath();
+  pcaCtx.moveTo(ox-u1[0]*arLen*scale, oy+u1[1]*arLen*scale);
+  pcaCtx.lineTo(ox+u1[0]*arLen*scale, oy-u1[1]*arLen*scale);
+  pcaCtx.stroke();
+  pcaCtx.fillStyle='#f44336'; pcaCtx.font='14px sans-serif';
+  pcaCtx.fillText('PC1', ox+u1[0]*arLen*scale+5, oy-u1[1]*arLen*scale+5);
+
+  // Projection lines
+  for (const [x,y] of rpts) {
+    const dot = x*u1[0] + (-y)*(-u1[1]); // project (note y-axis flip)
+    const dotR = (x-mx)*u1[0] + (-(y-my))*(-u1[1]);
+    const projX = mx + dotR*u1[0], projY = my + dotR*u1[1];
+    pcaCtx.strokeStyle='rgba(100,200,100,0.25)'; pcaCtx.lineWidth=0.8;
+    pcaCtx.beginPath();
+    pcaCtx.moveTo(ox+x*scale, oy-y*scale);
+    pcaCtx.lineTo(ox+projX*scale, oy-projY*scale);
+    pcaCtx.stroke();
+  }
+
+  // Divider
+  pcaCtx.strokeStyle='#2a3a5c'; pcaCtx.lineWidth=1;
+  pcaCtx.beginPath(); pcaCtx.moveTo(W/2, 10); pcaCtx.lineTo(W/2, H-10); pcaCtx.stroke();
+
+  // Right panel: 1D projection
+  const ox2 = W*3/4, oy2 = H/2;
+  pcaCtx.fillStyle='#555'; pcaCtx.font='12px sans-serif';
+  pcaCtx.fillText('Projected to 1D (PC1)', ox2-60, 25);
+  pcaCtx.strokeStyle='#374151'; pcaCtx.lineWidth=1.5;
+  pcaCtx.beginPath(); pcaCtx.moveTo(W/2+20, oy2); pcaCtx.lineTo(W-20, oy2); pcaCtx.stroke();
+
+  const projs = rpts.map(([x,y]) => (x-mx)*u1[0] + (-(y-my))*(-u1[1]));
+  for (const p of projs) {
+    pcaCtx.fillStyle='rgba(244,67,54,0.7)';
+    pcaCtx.beginPath(); pcaCtx.arc(ox2+p*scale, oy2, 4, 0, 2*Math.PI); pcaCtx.fill();
+  }
+
+  // Variance annotation
+  const v1 = l1, vtot = l1+l2, pct = (v1/vtot*100).toFixed(1);
+  pcaCtx.fillStyle='#a8d8a8'; pcaCtx.font='13px sans-serif'; pcaCtx.textAlign='center';
+  pcaCtx.fillText(`PC1 explains ${pct}% of variance`, ox2, H-15);
+}
+
+document.getElementById('rotation').addEventListener('input', drawPCA);
+document.getElementById('noise').addEventListener('input', drawPCA);
+regenerateData();
+
+// ─── Scree plot ───────────────────────────────────────────────────────────────
+const scC = document.getElementById('screeCanvas');
+const scCtx = scC.getContext('2d');
+
+function drawScree() {
+  // Simulated eigenvalues for exam-like data (highly correlated 5 features)
+  const evals = [4.92, 0.04, 0.02, 0.01, 0.01];
+  const total = evals.reduce((a,b)=>a+b,0);
+  const cumvar = evals.map((_, i) => evals.slice(0,i+1).reduce((a,b)=>a+b,0)/total);
+
+  const W = scC.width, H = scC.height;
+  scCtx.clearRect(0,0,W,H); scCtx.fillStyle='#111827'; scCtx.fillRect(0,0,W,H);
+
+  const padL=60, padR=40, padT=30, padB=40;
+  const gW = W-padL-padR, gH = H-padT-padB;
+  const barW = gW/5 * 0.5;
+
+  scCtx.strokeStyle='#374151'; scCtx.lineWidth=1;
+  scCtx.beginPath(); scCtx.moveTo(padL,padT); scCtx.lineTo(padL,padT+gH); scCtx.lineTo(padL+gW,padT+gH); scCtx.stroke();
+
+  scCtx.fillStyle='#555'; scCtx.font='11px sans-serif'; scCtx.textAlign='right';
+  [0,1,2,3,4,5].forEach(v => {
+    const y = padT+gH - v/5*gH;
+    scCtx.fillText(v, padL-6, y+4);
+    scCtx.strokeStyle='#1e2840'; scCtx.beginPath(); scCtx.moveTo(padL,y); scCtx.lineTo(padL+gW,y); scCtx.stroke();
+  });
+
+  evals.forEach((ev, i) => {
+    const x = padL + (i+0.5)/5*gW - barW/2;
+    const barH2 = ev/5*gH;
+    scCtx.fillStyle = i===0 ? '#4caf50' : '#2a4a3a';
+    scCtx.fillRect(x, padT+gH-barH2, barW, barH2);
+    scCtx.fillStyle='#aaa'; scCtx.textAlign='center';
+    scCtx.fillText(`PC${i+1}`, x+barW/2, padT+gH+15);
+    scCtx.fillStyle='#ffd700';
+    scCtx.fillText(`${(ev/total*100).toFixed(1)}%`, x+barW/2, padT+gH-barH2-6);
+  });
+
+  // Cumulative line
+  scCtx.strokeStyle='#ff9800'; scCtx.lineWidth=2; scCtx.setLineDash([6,3]);
+  scCtx.beginPath();
+  cumvar.forEach((cv, i) => {
+    const x = padL + (i+0.5)/5*gW;
+    const y = padT+gH - cv*gH;
+    i===0 ? scCtx.moveTo(x,y) : scCtx.lineTo(x,y);
+    scCtx.fillStyle='#ff9800'; scCtx.setLineDash([]);
+    scCtx.beginPath(); scCtx.arc(x,y,4,0,2*Math.PI); scCtx.fill();
+    scCtx.setLineDash([6,3]);
+    scCtx.beginPath();
+  });
+  cumvar.forEach((cv, i) => {
+    const x = padL + (i+0.5)/5*gW;
+    const y = padT+gH - cv*gH;
+    i===0 ? scCtx.moveTo(x,y) : scCtx.lineTo(x,y);
+  });
+  scCtx.stroke();
+  scCtx.setLineDash([]);
+
+  scCtx.fillStyle='#ff9800'; scCtx.font='12px sans-serif'; scCtx.textAlign='left';
+  scCtx.fillText('Orange line = cumulative variance', padL+gW*0.6, padT+15);
+  scCtx.fillStyle='#4caf50';
+  scCtx.fillText('PC1 alone: 98.4% of variance!', padL+gW*0.6, padT+32);
+}
+drawScree();
+</script>
+</body>
+</html>

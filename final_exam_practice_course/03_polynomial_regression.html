@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Concept 3 — Polynomial Regression & Prediction Uncertainty</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; line-height: 1.7; }
+  .hero { background: linear-gradient(135deg, #1a1f35 0%, #0d1b2a 100%); padding: 48px 32px; border-bottom: 2px solid #2a3a5c; }
+  .hero h1 { font-size: 2rem; color: #ffd700; margin-bottom: 8px; }
+  .hero p { color: #8a9bb0; font-size: 1.05rem; }
+  .container { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+  h2 { color: #ffd700; font-size: 1.4rem; margin: 40px 0 16px; padding-bottom: 6px; border-bottom: 1px solid #2a3a5c; }
+  h3 { color: #7eb8f7; font-size: 1.1rem; margin: 24px 0 10px; }
+  p { margin-bottom: 14px; color: #cdd5e0; }
+  .card { background: #1a1f2e; border: 1px solid #2a3a5c; border-radius: 12px; padding: 24px; margin: 20px 0; }
+  .card.green { border-left: 4px solid #4caf50; }
+  .card.blue  { border-left: 4px solid #2196f3; }
+  .card.orange{ border-left: 4px solid #ff9800; }
+  .formula { background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 16px 24px; margin: 16px 0; font-family: 'Courier New', monospace; font-size: 1rem; color: #ffd700; text-align: center; }
+  canvas { display: block; border-radius: 8px; }
+  .controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 16px 0; justify-content: center; }
+  .slider-group { display: flex; align-items: center; gap: 10px; }
+  label { color: #aaa; font-size: 0.9rem; }
+  input[type=range] { width: 130px; accent-color: #ffd700; }
+  .val { color: #ffd700; font-weight: bold; min-width: 40px; }
+  .step { background: #1e2840; border-radius: 8px; padding: 14px 18px; margin: 10px 0; border-left: 3px solid #ffd700; }
+  .step-num { display: inline-block; background: #ffd700; color: #0f1117; width: 26px; height: 26px; border-radius: 50%; text-align: center; line-height: 26px; font-weight: bold; margin-right: 10px; font-size: 0.85rem; }
+  .exam-box { background: #1a1500; border: 2px solid #ffd700; border-radius: 10px; padding: 20px; margin: 24px 0; }
+  .exam-box h4 { color: #ffd700; margin-bottom: 12px; }
+  pre { font-family: 'Courier New', monospace; color: #90caf9; font-size: 0.88rem; line-height: 1.6; background: #111827; padding: 16px; border-radius: 8px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { background: #1a2540; color: #ffd700; padding: 10px 14px; text-align: left; }
+  td { padding: 9px 14px; border-bottom: 1px solid #1e2a40; color: #cdd5e0; }
+  code { background: #1e2840; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #ffd700; font-size: 0.9em; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; margin: 0 4px; }
+  .badge.good { background: #1a4a1a; color: #4caf50; border: 1px solid #4caf50; }
+  .badge.bad  { background: #4a1a1a; color: #f44336; border: 1px solid #f44336; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>📈 Polynomial Regression & Uncertainty</h1>
+  <p>Fitting curves, choosing the right degree, and understanding prediction confidence — Problems 1c and 1d</p>
+</div>
+
+<div class="container">
+
+  <h2>From Linear to Polynomial Regression</h2>
+  <p>In the exam, after PCA you have a single feature x₁ (the PC1 projection) and a target t. Plotting t vs x₁ shows a curved relationship — a polynomial fit is needed.</p>
+
+  <div class="card blue">
+    <h3>Why polynomial regression?</h3>
+    <p>Linear regression: t = w₀ + w₁·x₁ → only straight lines</p>
+    <p>Polynomial (degree d): t = w₀ + w₁·x₁ + w₂·x₁² + ... + w_d·x₁ᵈ → curves</p>
+    <p><strong>Key insight:</strong> It's still <em>linear regression</em> — linear in the weights w. We just create extra features [x, x², x³, ...] and apply the same MSE formula.</p>
+  </div>
+
+  <h2>Interactive: Fit Polynomials of Different Degrees</h2>
+  <div style="text-align:center; margin:20px 0;">
+    <canvas id="polyCanvas" width="820" height="360"></canvas>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Polynomial degree</label>
+        <input type="range" id="degree" min="1" max="9" step="1" value="2">
+        <span class="val" id="deg_val">2</span>
+      </div>
+      <div class="slider-group">
+        <label>Noise σ</label>
+        <input type="range" id="sigma_noise" min="0.2" max="3" step="0.1" value="1">
+        <span class="val" id="sigma_val">1.0</span>
+      </div>
+      <button onclick="regenPoly()" style="background:#ffd700;color:#0f1117;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:bold;">New Data</button>
+    </div>
+    <div id="poly_stats" style="color:#aaa; font-size:0.85rem; margin-top:8px;"></div>
+  </div>
+
+  <h2>How to Choose the Degree (Problem 1c)</h2>
+  <p>Look at the scatter plot of t vs x₁ and ask: <em>what shape does the relationship have?</em></p>
+
+  <table>
+    <tr><th>Visual pattern</th><th>Suggested degree</th><th>Example</th></tr>
+    <tr><td>Straight line</td><td>1 (linear)</td><td>t increases steadily with x₁</td></tr>
+    <tr><td>One bend (U or ∩ shape)</td><td>2 (quadratic)</td><td>t has one peak or valley</td></tr>
+    <tr><td>S-shape or two bends</td><td>3 (cubic)</td><td>t changes direction twice</td></tr>
+    <tr><td>More complex</td><td>4+ (use residual analysis)</td><td>Visual inspection + trial</td></tr>
+  </table>
+
+  <div class="card orange">
+    <h3>The Goldilocks principle: not too low, not too high</h3>
+    <p><span class="badge bad">Underfitting (too low)</span> The model can't capture the real curve — large systematic errors</p>
+    <p><span class="badge bad">Overfitting (too high)</span> The model memorises the training noise — wiggles between points</p>
+    <p><span class="badge good">Just right</span> Captures the trend without chasing noise — good predictions on new data</p>
+    <p style="margin-top:10px;"><strong>In the exam:</strong> The data likely follows a quadratic (degree 2) or cubic (degree 3). Start with degree 2, look at residuals, go higher if needed.</p>
+  </div>
+
+  <h2>The Math: Building the Design Matrix</h2>
+  <div class="formula">Φ = [[1, x₁⁽¹⁾, x₁⁽¹⁾², ..., x₁⁽¹⁾ᵈ],<br>
+      [1, x₁⁽²⁾, x₁⁽²⁾², ..., x₁⁽²⁾ᵈ],<br>
+      ...]</div>
+  <p>Then the normal equation gives the optimal weights in one shot:</p>
+  <div class="formula">W* = (ΦᵀΦ)⁻¹ Φᵀ t</div>
+  <p>Predictions: t̂ = Φ · W*</p>
+
+  <h2>Prediction Uncertainty (Problem 1d)</h2>
+  <p>The exam asks: <em>"Determine what is the expected uncertainty of the predictions."</em></p>
+  <p>This means: compute the <strong>Root Mean Square Error (RMSE)</strong> on the training data. It tells you how far off your predictions typically are.</p>
+
+  <div class="step">
+    <span class="step-num">1</span> Compute residuals: ε = t − t̂ = t − Φ·W*
+  </div>
+  <div class="step">
+    <span class="step-num">2</span> Compute variance of residuals: σ² = (1/m) · εᵀε
+  </div>
+  <div class="step">
+    <span class="step-num">3</span> RMSE = σ = √(σ²) — this is the uncertainty in the same units as t
+  </div>
+
+  <div class="card green">
+    <h3>What "uncertainty" means physically</h3>
+    <p>If RMSE = 5, then your predictions are typically off by ±5 units. You can say: "The expected prediction uncertainty is ±5 (1σ), or ±10 (2σ = 95% confidence interval)."</p>
+    <p>This is called the <strong>standard error of the regression</strong>.</p>
+  </div>
+
+  <h2>Interactive: See How Uncertainty Is Computed</h2>
+  <div style="text-align:center; margin:20px 0;">
+    <canvas id="uncertCanvas" width="820" height="320"></canvas>
+    <div class="controls">
+      <div class="slider-group">
+        <label>Degree</label>
+        <input type="range" id="degree2" min="1" max="6" step="1" value="2">
+        <span class="val" id="deg2_val">2</span>
+      </div>
+    </div>
+    <div id="uncert_stats" style="color:#aaa; font-size:0.85rem; margin-top:8px;"></div>
+  </div>
+
+  <h2>The Exam Code (Problem 1d)</h2>
+  <div class="exam-box">
+    <h4>✅ Polynomial regression + uncertainty — no sklearn</h4>
+    <pre>
+degree = 2   # chosen from visual inspection in 1(c)
+
+# Build design matrix Φ: columns are [1, x1, x1², ..., x1^degree]
+def design_matrix(x, d):
+    return np.column_stack([x**i for i in range(d + 1)])
+
+Phi = design_matrix(x1_train, degree)   # x1_train from PCA step
+
+# Normal equation: W = (ΦᵀΦ)⁻¹ Φᵀ t
+W = np.linalg.inv(Phi.T @ Phi) @ Phi.T @ t_train
+
+# Predictions on training data
+t_pred = Phi @ W
+
+# Residuals
+residuals = t_train - t_pred
+
+# Expected uncertainty (RMSE = standard deviation of residuals)
+sigma = np.sqrt(np.mean(residuals**2))
+print(f"Expected prediction uncertainty: ±{sigma:.3f}")
+
+# Plot
+import matplotlib.pyplot as plt
+x_line = np.linspace(x1_train.min(), x1_train.max(), 200)
+Phi_line = design_matrix(x_line, degree)
+t_line = Phi_line @ W
+
+plt.scatter(x1_train, t_train, label='Training data', zorder=5)
+plt.plot(x_line, t_line, 'r-', linewidth=2, label=f'Degree-{degree} fit')
+plt.fill_between(x_line, t_line - sigma, t_line + sigma,
+                 alpha=0.2, color='red', label=f'±1σ = ±{sigma:.2f}')
+plt.xlabel('x₁ (PC1)'); plt.ylabel('t')
+plt.legend(); plt.title('Polynomial regression with uncertainty band')
+plt.show()
+    </pre>
+  </div>
+
+  <h2>Problem 1e: Predict on Test Data</h2>
+  <div class="exam-box">
+    <h4>✅ Full pipeline: load → PCA → polynomial → predict</h4>
+    <pre>
+# 1. Apply same PCA transformation to test data
+X_test_norm = (X_test - mu) / sigma_train   # use training statistics!
+x1_test = (X_test_norm @ U1).flatten()
+
+# 2. Build test design matrix with same degree
+Phi_test = design_matrix(x1_test, degree)
+
+# 3. Predict
+t_test_pred = Phi_test @ W
+
+print("Predicted values for test set:")
+for i, val in enumerate(t_test_pred):
+    print(f"  Sample {i}: t = {val:.4f}")
+    </pre>
+  </div>
+
+  <h2>Summary: The Full Problem 1 Pipeline</h2>
+  <div style="background:#111827; border-radius:10px; padding:20px; margin:20px 0; font-family:monospace; font-size:0.9rem; line-height:2;">
+    <span style="color:#4caf50;">train.csv</span> → <span style="color:#aaa;">[load]</span>
+    → <span style="color:#7eb8f7;">X (50×5), t (50,)</span>
+    → <span style="color:#aaa;">[PCA: normalise + eig]</span>
+    → <span style="color:#a8d8a8;">x1_train (50,) 1D</span>
+    → <span style="color:#aaa;">[plot, choose degree]</span>
+    → <span style="color:#ffd700;">[polynomial fit: normal eq]</span>
+    → <span style="color:#ff9800;">W*, RMSE (uncertainty)</span>
+    → <span style="color:#aaa;">[apply same transform to test]</span>
+    → <span style="color:#f44336;">t_test_pred</span>
+  </div>
+
+  <p style="margin-top:32px; color:#666; text-align:center; font-size:0.85rem;">
+    ← <a href="02_pca_visual.html" style="color:#ffd700;">02 — PCA Visual Explainer</a>
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    <a href="exam_solution.ipynb" style="color:#ffd700;">Open Exam Solution Notebook →</a>
+  </p>
+</div>
+
+<script>
+// ─── Polynomial canvas ────────────────────────────────────────────────────────
+const polyC = document.getElementById('polyCanvas');
+const pCtx = polyC.getContext('2d');
+let polyData = { x: [], t: [] };
+
+function regenPoly() {
+  const sig = parseFloat(document.getElementById('sigma_noise').value);
+  polyData.x = []; polyData.t = [];
+  for (let i = 0; i < 40; i++) {
+    const x = (Math.random()-0.5)*8;
+    const t = 0.3*x*x - 1.5*x + Math.random()*sig*2-sig;  // quadratic true
+    polyData.x.push(x); polyData.t.push(t);
+  }
+  drawPoly();
+}
+
+function lstsq(Phi, t) {
+  // Normal equation (simple, no regularisation)
+  const PhiT = transpose(Phi);
+  const A = matmul(PhiT, Phi);
+  const b = matvec(PhiT, t);
+  return solveLinear(A, b);
+}
+
+function transpose(M) {
+  return M[0].map((_, j) => M.map(row => row[j]));
+}
+function matmul(A, B) {
+  return A.map(row => B[0].map((_, j) => row.reduce((s, v, k) => s + v*B[k][j], 0)));
+}
+function matvec(M, v) {
+  return M.map(row => row.reduce((s, val, k) => s + val*v[k], 0));
+}
+function solveLinear(A, b) {
+  // Gaussian elimination
+  const n = A.length;
+  const aug = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let maxRow = col;
+    for (let r = col+1; r < n; r++) if (Math.abs(aug[r][col]) > Math.abs(aug[maxRow][col])) maxRow = r;
+    [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]];
+    for (let r = col+1; r < n; r++) {
+      const factor = aug[r][col] / aug[col][col];
+      for (let c = col; c <= n; c++) aug[r][c] -= factor * aug[col][c];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n-1; i >= 0; i--) {
+    x[i] = aug[i][n] / aug[i][i];
+    for (let j = i+1; j < n; j++) x[i] -= aug[i][j]*x[j]/aug[i][i];
+  }
+  return x;
+}
+function buildPhi(xs, d) {
+  return xs.map(x => Array.from({length: d+1}, (_, i) => x**i));
+}
+function polyEval(W, x) {
+  return W.reduce((s, w, i) => s + w * x**i, 0);
+}
+
+function drawPoly() {
+  const deg = parseInt(document.getElementById('degree').value);
+  document.getElementById('deg_val').textContent = deg;
+  document.getElementById('sigma_val').textContent = parseFloat(document.getElementById('sigma_noise').value).toFixed(1);
+
+  const { x, t } = polyData;
+  if (x.length === 0) return;
+
+  const Phi = buildPhi(x, deg);
+  const W = lstsq(Phi, t);
+  const t_pred = x.map(xi => polyEval(W, xi));
+  const residuals = t.map((ti, i) => ti - t_pred[i]);
+  const rmse = Math.sqrt(residuals.reduce((s,r)=>s+r*r,0)/residuals.length);
+
+  const W2 = pCtx.canvas.width, H = pCtx.canvas.height;
+  pCtx.clearRect(0,0,W2,H); pCtx.fillStyle='#111827'; pCtx.fillRect(0,0,W2,H);
+
+  const xmin = -5, xmax = 5, ymin = -15, ymax = 20;
+  const toX = xi => (xi-xmin)/(xmax-xmin)*(W2-80)+40;
+  const toY = yi => H-40 - (yi-ymin)/(ymax-ymin)*(H-70);
+
+  // Grid
+  pCtx.strokeStyle='#1e2840'; pCtx.lineWidth=1;
+  [-4,-2,0,2,4].forEach(xg => { pCtx.beginPath(); pCtx.moveTo(toX(xg),30); pCtx.lineTo(toX(xg),H-40); pCtx.stroke(); });
+  [-10,-5,0,5,10,15].forEach(yg => { pCtx.beginPath(); pCtx.moveTo(40,toY(yg)); pCtx.lineTo(W2-40,toY(yg)); pCtx.stroke(); });
+  pCtx.fillStyle='#444'; pCtx.font='10px sans-serif'; pCtx.textAlign='center';
+  [-4,-2,0,2,4].forEach(xg => pCtx.fillText(xg, toX(xg), H-22));
+
+  // Fit line + band
+  const xs_line = Array.from({length:200}, (_,i) => xmin + (xmax-xmin)*i/199);
+  const ys_line = xs_line.map(xi => polyEval(W, xi));
+
+  pCtx.fillStyle='rgba(255,100,100,0.12)';
+  pCtx.beginPath(); pCtx.moveTo(toX(xs_line[0]), toY(ys_line[0]-rmse));
+  xs_line.forEach((xi,i) => pCtx.lineTo(toX(xi), toY(ys_line[i]-rmse)));
+  xs_line.slice().reverse().forEach((xi,i,arr) => pCtx.lineTo(toX(xi), toY(ys_line[arr.length-1-i]+rmse)));
+  pCtx.closePath(); pCtx.fill();
+
+  pCtx.strokeStyle='#f44336'; pCtx.lineWidth=2.5;
+  pCtx.beginPath();
+  xs_line.forEach((xi, i) => i===0 ? pCtx.moveTo(toX(xi),toY(ys_line[i])) : pCtx.lineTo(toX(xi),toY(ys_line[i])));
+  pCtx.stroke();
+
+  // Data points
+  x.forEach((xi, i) => {
+    pCtx.fillStyle='rgba(126,184,247,0.8)';
+    pCtx.beginPath(); pCtx.arc(toX(xi), toY(t[i]), 5, 0, 2*Math.PI); pCtx.fill();
+  });
+
+  // Axes
+  pCtx.strokeStyle='#374151'; pCtx.lineWidth=1.5;
+  pCtx.beginPath(); pCtx.moveTo(40,H-40); pCtx.lineTo(W2-40,H-40); pCtx.stroke();
+
+  document.getElementById('poly_stats').textContent = `Degree ${deg} fit | RMSE = ${rmse.toFixed(3)} | ±1σ band shown in red`;
+}
+
+document.getElementById('degree').addEventListener('input', drawPoly);
+document.getElementById('sigma_noise').addEventListener('input', drawPoly);
+regenPoly();
+
+// ─── Uncertainty canvas ───────────────────────────────────────────────────────
+const uC = document.getElementById('uncertCanvas');
+const uCtx = uC.getContext('2d');
+
+function drawUncert() {
+  const deg = parseInt(document.getElementById('degree2').value);
+  document.getElementById('deg2_val').textContent = deg;
+  const { x, t } = polyData;
+  if (x.length === 0) { setTimeout(drawUncert, 200); return; }
+  const Phi = buildPhi(x, deg);
+  const W = lstsq(Phi, t);
+  const t_pred = x.map(xi => polyEval(W, xi));
+  const residuals = t.map((ti, i) => ti - t_pred[i]);
+  const rmse = Math.sqrt(residuals.reduce((s,r)=>s+r*r,0)/residuals.length);
+
+  const W2 = uC.width, H = uC.height;
+  uCtx.clearRect(0,0,W2,H); uCtx.fillStyle='#111827'; uCtx.fillRect(0,0,W2,H);
+
+  // Residual histogram
+  const rmin = Math.min(...residuals), rmax = Math.max(...residuals);
+  const nBins = 15;
+  const bw = (rmax-rmin)/nBins;
+  const counts = new Array(nBins).fill(0);
+  residuals.forEach(r => {
+    const b = Math.min(Math.floor((r-rmin)/bw), nBins-1);
+    counts[b]++;
+  });
+  const maxC = Math.max(...counts);
+  const padL=60, padR=20, padT=30, padB=40;
+  const gW = W2-padL-padR, gH = H-padT-padB;
+  const toX = r => padL + (r-rmin)/(rmax-rmin)*gW;
+  const toY = c => padT + gH - c/maxC*gH;
+
+  uCtx.fillStyle='#555'; uCtx.font='13px sans-serif'; uCtx.textAlign='center';
+  uCtx.fillText('Residuals histogram (t − t̂)', W2/2, 20);
+
+  counts.forEach((c, b) => {
+    const rx = rmin + b*bw, rx2 = rx+bw;
+    uCtx.fillStyle='rgba(168,216,168,0.5)'; uCtx.strokeStyle='#4caf50'; uCtx.lineWidth=0.8;
+    uCtx.fillRect(toX(rx), toY(c), toX(rx2)-toX(rx)-1, gH-(toY(c)-padT));
+    uCtx.strokeRect(toX(rx), toY(c), toX(rx2)-toX(rx)-1, gH-(toY(c)-padT));
+  });
+
+  // Gaussian overlay
+  const mean_r = residuals.reduce((s,r)=>s+r,0)/residuals.length;
+  const norm_scale = residuals.length * bw;
+  uCtx.strokeStyle='#ffd700'; uCtx.lineWidth=2.5;
+  uCtx.beginPath();
+  for (let i=0; i<=200; i++) {
+    const r = rmin + (rmax-rmin)*i/200;
+    const g = norm_scale/(rmse*Math.sqrt(2*Math.PI)) * Math.exp(-0.5*((r-mean_r)/rmse)**2);
+    const y = toY(g/maxC*maxC);
+    i===0 ? uCtx.moveTo(toX(r),y) : uCtx.lineTo(toX(r),y);
+  }
+  uCtx.stroke();
+
+  // σ lines
+  uCtx.strokeStyle='#ff9800'; uCtx.lineWidth=1.5; uCtx.setLineDash([6,4]);
+  [mean_r-rmse, mean_r+rmse].forEach(v => {
+    uCtx.beginPath(); uCtx.moveTo(toX(v),padT); uCtx.lineTo(toX(v),padT+gH); uCtx.stroke();
+  });
+  uCtx.setLineDash([]);
+  uCtx.fillStyle='#ff9800'; uCtx.textAlign='center'; uCtx.font='11px sans-serif';
+  uCtx.fillText('-σ', toX(mean_r-rmse), padT-5);
+  uCtx.fillText('+σ', toX(mean_r+rmse), padT-5);
+
+  // Axis
+  uCtx.strokeStyle='#374151'; uCtx.lineWidth=1.5;
+  uCtx.beginPath(); uCtx.moveTo(padL,padT+gH); uCtx.lineTo(padL+gW,padT+gH); uCtx.stroke();
+
+  document.getElementById('uncert_stats').textContent =
+    `Degree ${deg} | RMSE = ${rmse.toFixed(3)} | 68% of residuals fall within ±${rmse.toFixed(2)} (1σ) | 95% within ±${(2*rmse).toFixed(2)} (2σ)`;
+}
+
+document.getElementById('degree2').addEventListener('input', drawUncert);
+setTimeout(drawUncert, 300);
+</script>
+</body>
+</html>
